@@ -1,13 +1,19 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreSubscriptionPlanRequest;
 use App\Http\Requests\UpdateSubscriptionPlanRequest;
+use App\Http\Resources\SubscriptionPlanResource;
 use App\Models\SubscriptionPlan;
 use App\Services\MoneyService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class CoachPlanController extends Controller
 {
@@ -21,34 +27,52 @@ class CoachPlanController extends Controller
             'active'        => true,
         ]);
 
-        return response()->json($plan, 201);
+        Log::info('plan.created', [
+            'plan_id'  => $plan->id,
+            'coach_id' => $plan->coach_id,
+        ]);
+
+        return response()->json(new SubscriptionPlanResource($plan), 201);
     }
 
     public function update(UpdateSubscriptionPlanRequest $request, int $id): JsonResponse
     {
-        $plan = SubscriptionPlan::where('id', $id)
-            ->where('coach_id', $request->user()->id)
-            ->firstOrFail();
+        $plan = SubscriptionPlan::findOrFail($id);
+        $this->authorize('update', $plan);
 
         $data = $request->only(['name', 'billing_cycle', 'active']);
-
         if ($request->has('price')) {
             $data['price_cents'] = MoneyService::toCents($request->price);
         }
 
-        $plan->update($data);
+        DB::transaction(function () use ($plan, $data): void {
+            $plan->lockForUpdate();
+            $plan->update($data);
+        });
 
-        return response()->json($plan);
+        Log::info('plan.updated', [
+            'plan_id'  => $plan->id,
+            'coach_id' => $request->user()->id,
+        ]);
+
+        return response()->json(new SubscriptionPlanResource($plan->fresh()));
     }
 
-    public function destroy(int $id): JsonResponse
+    public function destroy(Request $request, int $id): JsonResponse
     {
-        $plan = SubscriptionPlan::where('id', $id)
-            ->where('coach_id', auth()->id())
-            ->firstOrFail();
+        $plan = SubscriptionPlan::findOrFail($id);
+        $this->authorize('delete', $plan);
 
-        $plan->update(['active' => false]);
+        DB::transaction(function () use ($plan): void {
+            $plan->lockForUpdate();
+            $plan->update(['active' => false]);
+        });
 
-        return response()->json($plan);
+        Log::info('plan.deactivated', [
+            'plan_id'  => $plan->id,
+            'coach_id' => $request->user()->id,
+        ]);
+
+        return response()->json(null, 204);
     }
 }

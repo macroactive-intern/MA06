@@ -1,14 +1,21 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreClientSubscriptionRequest;
+use App\Http\Resources\ClientSubscriptionResource;
+use App\Http\Resources\SubscriptionResource;
 use App\Models\Subscription;
 use App\Models\SubscriptionPlan;
 use App\Services\BillingDateService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 
 class ClientSubscriptionController extends Controller
 {
@@ -19,27 +26,40 @@ class ClientSubscriptionController extends Controller
         $plan = SubscriptionPlan::findOrFail($request->plan_id);
 
         if (! $plan->active) {
-            return response()->json(['message' => 'Plan is not active.'], 422);
+            throw ValidationException::withMessages([
+                'plan_id' => ['The selected plan is not active.'],
+            ]);
         }
 
-        $alreadySubscribed = Subscription::where('client_id', $request->user()->id)
-            ->where('plan_id', $plan->id)
-            ->where('status', 'active')
-            ->exists();
+        $subscription = DB::transaction(function () use ($request, $plan) {
+            $alreadySubscribed = Subscription::where('client_id', $request->user()->id)
+                ->where('plan_id', $plan->id)
+                ->where('status', 'active')
+                ->lockForUpdate()
+                ->exists();
 
-        if ($alreadySubscribed) {
-            return response()->json(['message' => 'You already have an active subscription to this plan.'], 422);
-        }
+            if ($alreadySubscribed) {
+                throw ValidationException::withMessages([
+                    'plan_id' => ['You already have an active subscription to this plan.'],
+                ]);
+            }
 
-        $subscription = Subscription::create([
-            'client_id'  => $request->user()->id,
-            'plan_id'    => $plan->id,
-            'status'     => 'active',
-            'started_at' => now(),
-            'ends_at'    => null,
+            return Subscription::create([
+                'client_id'  => $request->user()->id,
+                'plan_id'    => $plan->id,
+                'status'     => 'active',
+                'started_at' => now(),
+                'ends_at'    => null,
+            ]);
+        });
+
+        Log::info('subscription.created', [
+            'subscription_id' => $subscription->id,
+            'client_id'       => $subscription->client_id,
+            'plan_id'         => $subscription->plan_id,
         ]);
 
-        return response()->json($subscription->load('plan'), 201);
+        return response()->json(new SubscriptionResource($subscription), 201);
     }
 
     public function index(Request $request): JsonResponse
@@ -48,16 +68,10 @@ class ClientSubscriptionController extends Controller
             ->with('plan')
             ->get()
             ->map(function (Subscription $subscription) {
-                return [
-                    'id'                => $subscription->id,
-                    'plan_name'         => $subscription->plan->name,
-                    'status'            => $subscription->status,
-                    'started_at'        => $subscription->started_at,
-                    'next_billing_date' => $this->billingDateService
-                        ->nextBillingDate($subscription)
-                        ->toDateString(),
-                    'price_cents'       => $subscription->plan->price_cents,
-                ];
+                $subscription->next_billing_date = $this->billingDateService
+                    ->nextBillingDate($subscription)
+                    ->toDateString();
+                return new ClientSubscriptionResource($subscription);
             });
 
         return response()->json(['data' => $subscriptions]);
@@ -65,15 +79,22 @@ class ClientSubscriptionController extends Controller
 
     public function cancel(Request $request, int $id): JsonResponse
     {
-        $subscription = Subscription::where('id', $id)
-            ->where('client_id', $request->user()->id)
-            ->firstOrFail();
+        $subscription = Subscription::findOrFail($id);
+        $this->authorize('cancel', $subscription);
 
-        $subscription->update([
-            'status'  => 'cancelled',
-            'ends_at' => $this->billingDateService->currentPeriodEnd($subscription),
+        DB::transaction(function () use ($subscription): void {
+            $subscription->lockForUpdate();
+            $subscription->update([
+                'status'  => 'cancelled',
+                'ends_at' => $this->billingDateService->currentPeriodEnd($subscription),
+            ]);
+        });
+
+        Log::info('subscription.cancelled', [
+            'subscription_id' => $subscription->id,
+            'client_id'       => $subscription->client_id,
         ]);
 
-        return response()->json($subscription->fresh()->load('plan'));
+        return response()->json(new SubscriptionResource($subscription->fresh()));
     }
 }

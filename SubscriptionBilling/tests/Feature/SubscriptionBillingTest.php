@@ -130,7 +130,7 @@ it('returns only the authenticated clients own subscriptions', function () {
 // 7. Client cannot cancel another client's subscription
 // -----------------------------------------------------------------------
 
-it('returns 404 when a client tries to cancel another clients subscription', function () {
+it('returns 403 when a client tries to cancel another clients subscription', function () {
     $client1 = User::factory()->create();
     $client2 = User::factory()->create();
     $plan    = SubscriptionPlan::factory()->create();
@@ -142,7 +142,7 @@ it('returns 404 when a client tries to cancel another clients subscription', fun
 
     $this->actingAs($client2)
         ->postJson("/api/client/subscriptions/{$subscription->id}/cancel")
-        ->assertStatus(404);
+        ->assertStatus(403);
 });
 
 // -----------------------------------------------------------------------
@@ -176,24 +176,24 @@ it('cancellation sets status to cancelled and ends_at to the current period end'
 // 9. Coach plan ownership
 // -----------------------------------------------------------------------
 
-it('returns 404 when a coach tries to update another coachs plan', function () {
+it('returns 403 when a coach tries to update another coachs plan', function () {
     $coach1 = User::factory()->create();
     $coach2 = User::factory()->create();
     $plan   = SubscriptionPlan::factory()->create(['coach_id' => $coach1->id]);
 
     $this->actingAs($coach2)
         ->putJson("/api/coach/plans/{$plan->id}", ['name' => 'Hacked'])
-        ->assertStatus(404);
+        ->assertStatus(403);
 });
 
-it('returns 404 when a coach tries to deactivate another coachs plan', function () {
+it('returns 403 when a coach tries to deactivate another coachs plan', function () {
     $coach1 = User::factory()->create();
     $coach2 = User::factory()->create();
     $plan   = SubscriptionPlan::factory()->create(['coach_id' => $coach1->id]);
 
     $this->actingAs($coach2)
         ->deleteJson("/api/coach/plans/{$plan->id}")
-        ->assertStatus(404);
+        ->assertStatus(403);
 });
 
 // -----------------------------------------------------------------------

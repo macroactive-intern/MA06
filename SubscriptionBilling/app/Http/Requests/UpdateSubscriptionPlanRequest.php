@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Requests;
 
 use Illuminate\Contracts\Validation\ValidationRule;
@@ -17,10 +19,12 @@ class UpdateSubscriptionPlanRequest extends FormRequest
      */
     public function rules(): array
     {
+        $cycles = implode(',', array_keys(config('billing.cycles')));
+
         return [
             'name'          => ['sometimes', 'string', 'max:100'],
             'price'         => ['sometimes', 'numeric', 'min:0', 'decimal:0,2'],
-            'billing_cycle' => ['sometimes', 'in:monthly,quarterly,annual'],
+            'billing_cycle' => ['sometimes', "in:{$cycles}"],
             'active'        => ['sometimes', 'boolean'],
         ];
     }

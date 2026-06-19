@@ -1,9 +1,12 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\PaymentWebhookRequest;
+use App\Http\Resources\PaymentResource;
 use App\Services\PaymentWebhookService;
 use Illuminate\Http\JsonResponse;
 
@@ -17,6 +20,6 @@ class PaymentWebhookController extends Controller
 
         $status = $result['created'] ? 201 : 200;
 
-        return response()->json($result['payment'], $status);
+        return response()->json(new PaymentResource($result['payment']), $status);
     }
 }

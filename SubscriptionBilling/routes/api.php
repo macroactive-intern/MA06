@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\ClientSubscriptionController;
 use App\Http\Controllers\Api\CoachPlanController;
+use App\Http\Controllers\Api\CoachSubscriptionController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('auth:sanctum')->group(function () {
@@ -12,4 +13,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/client/subscriptions', [ClientSubscriptionController::class, 'store']);
     Route::get('/client/subscriptions', [ClientSubscriptionController::class, 'index']);
     Route::post('/client/subscriptions/{id}/cancel', [ClientSubscriptionController::class, 'cancel']);
+
+    Route::get('/coach/subscriptions', [CoachSubscriptionController::class, 'index']);
 });

@@ -4,9 +4,11 @@ use App\Http\Controllers\Api\ClientSubscriptionController;
 use App\Http\Controllers\Api\CoachPlanController;
 use App\Http\Controllers\Api\CoachSubscriptionController;
 use App\Http\Controllers\Api\PaymentWebhookController;
+use App\Http\Controllers\Api\SubscriptionPlanController;
 use Illuminate\Support\Facades\Route;
 
-// Public — no Sanctum auth (called by payment processor)
+// Public routes — no auth required
+Route::get('/plans', [SubscriptionPlanController::class, 'index']);
 Route::post('/webhooks/payment', [PaymentWebhookController::class, 'store']);
 
 Route::middleware('auth:sanctum')->group(function () {
